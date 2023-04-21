@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net7.0</TargetFramework>
+		<LangVersion>11</LangVersion>
+		<RootNamespace>Monads</RootNamespace>
+		<Nullable>enable</Nullable>
+		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+		<EnforceCodeStyleInBuild>False</EnforceCodeStyleInBuild>
+	</PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Monads.SourceGenerator\Monads.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+	</ItemGroup>
+	<ItemGroup>
+		<AdditionalFiles Include="src\ProgramM.mcs" />
+	</ItemGroup>
+</Project>

@@ -1,0 +1,21 @@
+using System;
+using Monads;
+
+public static class ProgramM
+{
+	[Monadic]
+	public static Maybe<string, string> MaybeFunction()
+	{
+		var result = Maybe.None<string, string>()!;
+		return Maybe.Some<string, string>(result.ToUpper());
+	}
+
+	[Monadic]
+	public static State<int, string, string> StateFunction()
+	{
+		var i = State.Get<int, string>()!;
+		State.Set<int, string>(i + 2)!;
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+}
