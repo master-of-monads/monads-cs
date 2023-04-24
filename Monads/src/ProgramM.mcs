@@ -11,6 +11,10 @@ public static class ProgramM
 	}
 
 	[Monadic]
+	public static Maybe<string, string> MaybeFunction2() =>
+		Maybe.Some<string, string>(Maybe.None<string, string>()!.ToUpper());
+
+	[Monadic]
 	public static State<int, string, string> StateFunction()
 	{
 		var i = State.Get<int, string>()!;

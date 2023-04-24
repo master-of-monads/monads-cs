@@ -10,14 +10,28 @@ public class MonadicBangRewriter : CSharpSyntaxRewriter
 {
 	public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax methodDeclaration)
 	{
-		if (methodDeclaration.AttributeLists.SelectMany(al => al.Attributes).Any(a => a.Name.ToString() == "Monadic") && methodDeclaration.Body is BlockSyntax bodyBlock)
+		if (methodDeclaration.AttributeLists.SelectMany(al => al.Attributes).Any(a => a.Name.ToString() == "Monadic"))
 		{
-			return methodDeclaration.WithBody(BindInBlock(bodyBlock));
+			if (methodDeclaration.ExpressionBody is ArrowExpressionClauseSyntax arrowExpression)
+			{
+				methodDeclaration = ConvertToBlockBody(methodDeclaration, arrowExpression);
+			}
+			if (methodDeclaration.Body is BlockSyntax bodyBlock)
+			{
+				return methodDeclaration.WithBody(BindInBlock(bodyBlock));
+			}
 		}
-		else
-		{
-			return methodDeclaration;
-		}
+
+		return methodDeclaration;
+	}
+
+	private static MethodDeclarationSyntax ConvertToBlockBody(MethodDeclarationSyntax methodDeclaration, ArrowExpressionClauseSyntax arrowExpression)
+	{
+		var returnStatement = SyntaxFactory.ReturnStatement(arrowExpression.Expression.WithLeadingTrivia(SyntaxFactory.Whitespace(" ")));
+		var block = SyntaxFactory.Block(returnStatement);
+		return methodDeclaration.WithExpressionBody(null)
+			.WithSemicolonToken(default)
+			.WithBody(block);
 	}
 
 	private static BlockSyntax BindInBlock(BlockSyntax block)
@@ -35,29 +49,23 @@ public class MonadicBangRewriter : CSharpSyntaxRewriter
 		}
 		statements.RemoveFirst();
 
-		if (statement is ExpressionStatementSyntax expressionStatement)
+		if (ShouldBeBound(statement, statements))
 		{
-			return BindStatement(expressionStatement, statements);
+			return BindStatement(statement, statements);
 		}
-		else if (statement is LocalDeclarationStatementSyntax localDeclarationStatement)
-		{
-			return BindLocalDeclaration(localDeclarationStatement, statements);
-		}
-		else
-		{
-			statements.AddFirst(statement);
-			return statements;
-		}
+
+		statements.AddFirst(statement);
+		return statements;
 	}
 
-	private static LinkedList<StatementSyntax> BindStatement(ExpressionStatementSyntax expressionStatement, LinkedList<StatementSyntax> statements)
+	private static LinkedList<StatementSyntax> BindStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements)
 	{
 		var rest = BindInStatements(statements);
 
-		var (binder, boundExpr) = BindExpression(expressionStatement.Expression);
-		if (boundExpr is not IdentifierNameSyntax)
+		var (binder, boundStatement) = BindExpressionsInStatement(statement);
+		if (ShouldBeReInserted(boundStatement))
 		{
-			rest.AddFirst(expressionStatement.WithExpression(boundExpr));
+			rest.AddFirst(boundStatement);
 		}
 
 		if (!binder.NeedsBinding())
@@ -66,32 +74,22 @@ public class MonadicBangRewriter : CSharpSyntaxRewriter
 		}
 
 		var thenBlock = SyntaxFactory.Block(rest)!;
-		var statement = binder.Bind(thenBlock);
-		return new LinkedList<StatementSyntax>(new[] { statement });
+		var blockStatement = binder.Bind(thenBlock);
+		return new LinkedList<StatementSyntax>(new[] { blockStatement });
 	}
 
-	private static LinkedList<StatementSyntax> BindLocalDeclaration(LocalDeclarationStatementSyntax localDeclarationStatement, LinkedList<StatementSyntax> statements)
-	{
-		var rest = BindInStatements(statements);
-
-		var (binder, boundExpr) = BindExpression(localDeclarationStatement.Declaration.Variables[0].Initializer!.Value);
-		var newDeclaration = localDeclarationStatement.Declaration.WithVariables(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.VariableDeclarator(localDeclarationStatement.Declaration.Variables[0].Identifier, null, SyntaxFactory.EqualsValueClause(boundExpr))));
-		rest.AddFirst(localDeclarationStatement.WithDeclaration(newDeclaration));
-
-		if (!binder.NeedsBinding())
-		{
-			return rest;
-		}
-
-		var thenBlock = SyntaxFactory.Block(rest)!;
-		var statement = binder.Bind(thenBlock);
-		return new LinkedList<StatementSyntax>(new[] { statement });
-	}
-
-	private static (ExpressionBinder, ExpressionSyntax) BindExpression(ExpressionSyntax expression)
+	private static (ExpressionBinder, StatementSyntax) BindExpressionsInStatement(StatementSyntax expression)
 	{
 		var binder = new ExpressionBinder();
-		var boundExpr = binder.Visit(expression) as ExpressionSyntax;
+		var boundExpr = binder.Visit(expression) as StatementSyntax;
 		return (binder, boundExpr!);
 	}
+
+	private static bool ShouldBeBound(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
+		statement is ExpressionStatementSyntax or
+				LocalDeclarationStatementSyntax or
+				ReturnStatementSyntax;
+
+	private static bool ShouldBeReInserted(StatementSyntax statement) =>
+		statement is not ExpressionStatementSyntax { Expression: IdentifierNameSyntax };
 }
