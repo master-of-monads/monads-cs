@@ -22,4 +22,20 @@ public static class ProgramM
 		var j = State.Get<int, string>()!;
 		return State.Return<int, string, string>(j.ToString());
 	}
+
+	[Monadic]
+	public static State<int, string, string> StateFunction2()
+	{
+		var i = State.Get<int, string>()!;
+		if (i == 0)
+		{
+			State.Set<int, string>(i + 2)!;
+		}
+		else
+		{
+			State.Set<int, string>(0)!;
+		}!;
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
 }
