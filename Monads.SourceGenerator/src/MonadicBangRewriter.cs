@@ -18,7 +18,7 @@ public class MonadicBangRewriter : CSharpSyntaxRewriter
 			}
 			if (methodDeclaration.Body is BlockSyntax bodyBlock)
 			{
-				return methodDeclaration.WithBody(BindInBlock(bodyBlock));
+				return methodDeclaration.WithBody(BindInBlock(bodyBlock, methodDeclaration.ReturnType));
 			}
 		}
 
@@ -34,10 +34,10 @@ public class MonadicBangRewriter : CSharpSyntaxRewriter
 			.WithBody(block);
 	}
 
-	private static BlockSyntax BindInBlock(BlockSyntax block)
+	public static BlockSyntax BindInBlock(BlockSyntax block, TypeSyntax returnType)
 	{
 		var statements = new LinkedList<StatementSyntax>(block.Statements);
-		statements = StatementBinder.BindInStatements(statements);
+		statements = StatementBinder.BindInStatements(statements, returnType);
 		return block.WithStatements(new SyntaxList<StatementSyntax>(statements));
 	}
 }

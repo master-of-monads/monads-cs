@@ -49,10 +49,16 @@ public class ExpressionBinder : CSharpSyntaxRewriter
 		return BuildMonadicBind(tempBind.Expression, tempBind.Identifier, thenBlock);
 	}
 
-	public static StatementSyntax BuildMonadicBind(ExpressionSyntax expression, IdentifierNameSyntax identifier, BlockSyntax thenBlock)
+	public static StatementSyntax BuildMonadicBind(ExpressionSyntax expression, IdentifierNameSyntax identifier, BlockSyntax thenBlock) =>
+		BuildMonadicBind(expression, SyntaxFactory.Parameter(identifier.Identifier), thenBlock);
+
+	public static StatementSyntax BuildMonadicBind(ExpressionSyntax expression, BlockSyntax thenBlock) =>
+		BuildMonadicBind(expression, SyntaxFactory.Parameter(SyntaxFactory.Identifier("_")), thenBlock);
+
+	private static StatementSyntax BuildMonadicBind(ExpressionSyntax expression, ParameterSyntax parameter, BlockSyntax thenBlock)
 	{
 		var bindMethod = SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, expression, SyntaxFactory.IdentifierName("Bind"));
-		var bindLambda = SyntaxFactory.SimpleLambdaExpression(SyntaxFactory.Parameter(identifier.Identifier), thenBlock);
+		var bindLambda = SyntaxFactory.SimpleLambdaExpression(parameter, thenBlock);
 		var bindInvocation = SyntaxFactory.InvocationExpression(bindMethod, SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(bindLambda))))
 			.WithLeadingTrivia(SyntaxFactory.Whitespace(" "));
 		return SyntaxFactory.ReturnStatement(bindInvocation);
