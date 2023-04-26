@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -36,6 +37,7 @@ public class StatementBinder
 		BindIfStatement(statement, statements) ??
 			BindMonadicForEachStatement(statement, statements) ??
 			BindMonadicWhileStatement(statement, statements) ??
+			BindMonadicForStatement(statement, statements) ??
 			BindBlockStatement(statement, statements) ??
 			BindSimpleStatement(statement, statements) ??
 			NoBind(statement, statements);
@@ -262,6 +264,32 @@ public class StatementBinder
 				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
 				expressionStatement.SemicolonToken.IsMissing &&
 				statements.First?.Value is WhileStatementSyntax;
+	}
+
+	private LinkedList<StatementSyntax>? BindMonadicForStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements)
+	{
+		if (!IsForStatement(statement, statements))
+		{
+			return null;
+		}
+		var forStatement = (ForStatementSyntax)statements.First!.Value;
+		statements.RemoveFirst();
+
+		var whileStatement = SyntaxFactory.WhileStatement(
+			forStatement.Condition ?? SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression),
+			SyntaxFactory.Block(forStatement.Statement)
+				.AddStatements(forStatement.Incrementors.Select(SyntaxFactory.ExpressionStatement).ToArray()));
+
+		statements.AddFirst(whileStatement);
+		var whileResultStatements = BindMonadicWhileStatement(statement, statements);
+		whileResultStatements!.AddFirst(SyntaxFactory.ParseStatement(forStatement.Declaration!.ToFullString() + ";"));
+		return whileResultStatements;
+
+		static bool IsForStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
+			statement is ExpressionStatementSyntax expressionStatement &&
+				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
+				expressionStatement.SemicolonToken.IsMissing &&
+				statements.First?.Value is ForStatementSyntax;
 	}
 
 	private LinkedList<StatementSyntax> NoBind(StatementSyntax statement, LinkedList<StatementSyntax> statements)

@@ -36,3 +36,7 @@ Console.WriteLine($"LoopState: {loopRes}");
 var loop2 = ProgramM.LoopStateFunction2(5);
 var loopRes2 = loop2.Function(0);
 Console.WriteLine($"LoopState2: {loopRes2}");
+
+var loop3 = ProgramM.LoopStateFunction3(5);
+var loopRes3 = loop3.Function(0);
+Console.WriteLine($"LoopState3: {loopRes3}");
