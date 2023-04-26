@@ -32,3 +32,7 @@ Console.WriteLine($"State322: {res322}");
 var loop = ProgramM.LoopStateFunction(new int[] { 0, 1, 20, 300 });
 var loopRes = loop.Function(0);
 Console.WriteLine($"LoopState: {loopRes}");
+
+var loop2 = ProgramM.LoopStateFunction2(5);
+var loopRes2 = loop2.Function(0);
+Console.WriteLine($"LoopState2: {loopRes2}");

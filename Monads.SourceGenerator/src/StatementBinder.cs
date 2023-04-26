@@ -35,6 +35,7 @@ public class StatementBinder
 	private LinkedList<StatementSyntax> BindStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
 		BindIfStatement(statement, statements) ??
 			BindMonadicForEachStatement(statement, statements) ??
+			BindMonadicWhileStatement(statement, statements) ??
 			BindBlockStatement(statement, statements) ??
 			BindSimpleStatement(statement, statements) ??
 			NoBind(statement, statements);
@@ -204,6 +205,63 @@ public class StatementBinder
 				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
 				expressionStatement.SemicolonToken.IsMissing &&
 				statements.First?.Value is ForEachStatementSyntax;
+	}
+
+	private LinkedList<StatementSyntax>? BindMonadicWhileStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements)
+	{
+		if (!IsWhileStatement(statement, statements))
+		{
+			return null;
+		}
+		var whileStatement = (WhileStatementSyntax)statements.First!.Value;
+		statements.RemoveFirst();
+
+		var rest = BindInStatements(statements);
+		var thenBlock = SyntaxFactory.Block(rest)!;
+
+		if (whileStatement.Statement is not BlockSyntax)
+		{
+			whileStatement = whileStatement.WithStatement(SyntaxFactory.Block(whileStatement.Statement));
+		}
+		var statementBlock = (BlockSyntax)whileStatement.Statement;
+		statementBlock = statementBlock.AddStatements(BuildDefaultReturn());
+		var boundStatementBlock = MonadicBangRewriter.BindInBlock(statementBlock, returnType);
+
+		var boundWhileStatement = SyntaxFactory.ReturnStatement(
+				SyntaxFactory.InvocationExpression(
+					SyntaxFactory.GenericName(
+						SyntaxFactory.Identifier("global::Monads.SourceGenerator.Loops.BindWhileStatement"),
+						SyntaxFactory.TypeArgumentList(
+							SyntaxFactory.SeparatedList(new[]
+							{
+								GetMonadReturnType(),
+								returnType
+							}))
+					),
+					SyntaxFactory.ArgumentList(
+						SyntaxFactory.SeparatedList(new[]
+						{
+							SyntaxFactory.Argument(
+								SyntaxFactory.ParenthesizedLambdaExpression(
+									SyntaxFactory.ParameterList(),
+									block: null,
+									expressionBody: whileStatement.Condition!)),
+							SyntaxFactory.Argument(
+								SyntaxFactory.ParenthesizedLambdaExpression(
+									SyntaxFactory.ParameterList(),
+									block: boundStatementBlock,
+									expressionBody: null))
+						})))
+			.WithLeadingTrivia(whileStatement.GetLeadingTrivia()
+				.Add(SyntaxFactory.Whitespace(" "))));
+
+		return new LinkedList<StatementSyntax>(new[] { ExpressionBinder.BuildMonadicBind(boundWhileStatement.Expression!, thenBlock) });
+
+		static bool IsWhileStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
+			statement is ExpressionStatementSyntax expressionStatement &&
+				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
+				expressionStatement.SemicolonToken.IsMissing &&
+				statements.First?.Value is WhileStatementSyntax;
 	}
 
 	private LinkedList<StatementSyntax> NoBind(StatementSyntax statement, LinkedList<StatementSyntax> statements)

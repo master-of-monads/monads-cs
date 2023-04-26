@@ -85,4 +85,17 @@ public static class ProgramM
 		var j = State.Get<int, string>()!;
 		return State.Return<int, string, string>(j.ToString());
 	}
+
+	[Monadic]
+	public static State<int, string, string> LoopStateFunction2(int max)
+	{
+		var i = 0;
+		monadic while (i < max)
+		{
+			State.Set<int, string>(State.Get<int, string>()! + i)!;
+			i++;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
 }

@@ -24,4 +24,15 @@ public static class Loops
 		var head = enumerator.Current;
 		return body(head).Bind(_ => RecurseForEachStatement<T, A, M>(enumerator, body));
 	}
+
+	public static M BindWhileStatement<A, M>(Func<bool> condition, Func<M> body)
+		where M : IMonad<A, A, M, M>
+	{
+		if (!condition())
+		{
+			return M.Return(default!);
+		}
+
+		return body().Bind(_ => BindWhileStatement<A, M>(condition, body));
+	}
 }
