@@ -26,7 +26,6 @@ public static class ProgramM
 	[Monadic]
 	public static State<int, string, string> StateFunction2()
 	{
-		monadic
 		{
 			var i = State.Get<int, string>()!;
 			State.Set<int, string>(i + 2)!;
@@ -38,7 +37,7 @@ public static class ProgramM
 	[Monadic]
 	public static State<int, string, string> StateFunction3()
 	{
-		monadic if (State.Get<int, string>()! == 0)
+		if (State.Get<int, string>()! == 0)
 		{
 			State.Set<int, string>(100)!;
 		}
@@ -50,6 +49,27 @@ public static class ProgramM
 		{
 			State.Set<int, string>(300)!;
 		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	[Monadic]
+	public static State<int, string, string> StateFunction32()
+	{
+		var i = State.Get<int, string>()!;
+		if (i == 0)
+		{
+			i = 100;
+		}
+		else if (i == 1)
+		{
+			i = 200;
+		}
+		else
+		{
+			i = 300;
+		}
+		State.Set<int, string>(i)!;
 		var j = State.Get<int, string>()!;
 		return State.Return<int, string, string>(j.ToString());
 	}

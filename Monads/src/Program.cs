@@ -20,3 +20,11 @@ var res31 = sm3.Function(1);
 Console.WriteLine($"State31: {res31}");
 var res32 = sm3.Function(2);
 Console.WriteLine($"State32: {res32}");
+
+var sm32 = ProgramM.StateFunction32();
+var res320 = sm32.Function(0);
+Console.WriteLine($"State320: {res320}");
+var res321 = sm32.Function(1);
+Console.WriteLine($"State321: {res321}");
+var res322 = sm32.Function(2);
+Console.WriteLine($"State322: {res322}");

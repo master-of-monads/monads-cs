@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -73,9 +74,7 @@ public class StatementBinder
 		{
 			return null;
 		}
-		var monadicKeyword = statement;
-		var block = (BlockSyntax)statements.First!.Value;
-		statements.RemoveFirst();
+		var block = (BlockSyntax)statement;
 
 		var rest = BindInStatements(statements);
 
@@ -85,10 +84,7 @@ public class StatementBinder
 		return new LinkedList<StatementSyntax>(new[] { BindBlockToReturn(boundBlock, thenBlock) });
 
 		static bool IsBlockStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
-			statement is ExpressionStatementSyntax expressionStatement &&
-				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
-				expressionStatement.SemicolonToken.IsMissing &&
-				statements.First?.Value is BlockSyntax;
+			statement is BlockSyntax;
 	}
 
 	private LinkedList<StatementSyntax>? BindIfStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements)
@@ -97,9 +93,7 @@ public class StatementBinder
 		{
 			return null;
 		}
-		var monadicKeyword = statement;
-		var ifStatement = (IfStatementSyntax)statements.First!.Value;
-		statements.RemoveFirst();
+		var ifStatement = (IfStatementSyntax)statement;
 
 		var rest = BindInStatements(statements);
 		var thenBlock = SyntaxFactory.Block(rest)!;
@@ -123,7 +117,7 @@ public class StatementBinder
 		}
 		else if (ifStatement.Else is ElseClauseSyntax { Statement: IfStatementSyntax elseIfStatement } elseClause)
 		{
-			var boundElseBlock = MonadicBangRewriter.BindInBlock(SyntaxFactory.Block(monadicKeyword, elseIfStatement), returnType);
+			var boundElseBlock = MonadicBangRewriter.BindInBlock(SyntaxFactory.Block(elseIfStatement), returnType);
 			ifStatement = ifStatement.WithElse(elseClause.WithStatement(BindBlockToReturn(boundElseBlock, thenBlock)));
 		}
 		else
@@ -148,10 +142,7 @@ public class StatementBinder
 		return new LinkedList<StatementSyntax>(new[] { blockStatement });
 
 		static bool IsIfStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
-			statement is ExpressionStatementSyntax expressionStatement &&
-				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
-				expressionStatement.SemicolonToken.IsMissing &&
-				statements.First?.Value is IfStatementSyntax;
+			statement is IfStatementSyntax;
 	}
 
 	private LinkedList<StatementSyntax> NoBind(StatementSyntax statement, LinkedList<StatementSyntax> statements)
