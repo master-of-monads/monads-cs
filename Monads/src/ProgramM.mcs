@@ -34,4 +34,23 @@ public static class ProgramM
 		var j = State.Get<int, string>()!;
 		return State.Return<int, string, string>(j.ToString());
 	}
+
+	[Monadic]
+	public static State<int, string, string> StateFunction3()
+	{
+		monadic if (State.Get<int, string>()! == 0)
+		{
+			State.Set<int, string>(100)!;
+		}
+		else if (State.Get<int, string>()! == 1)
+		{
+			State.Set<int, string>(200)!;
+		}
+		else
+		{
+			State.Set<int, string>(300)!;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
 }

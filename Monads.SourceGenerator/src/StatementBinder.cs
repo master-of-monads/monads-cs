@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -28,13 +27,13 @@ public class StatementBinder
 			return statements;
 		}
 
-		// Debugger.Launch();
 		statements.RemoveFirst();
 		return BindStatement(statement, statements);
 	}
 
 	private LinkedList<StatementSyntax> BindStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
-		BindBlockStatement(statement, statements) ??
+		BindIfStatement(statement, statements) ??
+			BindBlockStatement(statement, statements) ??
 			BindSimpleStatement(statement, statements) ??
 			NoBind(statement, statements);
 
@@ -80,18 +79,8 @@ public class StatementBinder
 
 		var rest = BindInStatements(statements);
 
-		var unitReturn = SyntaxFactory.ReturnStatement(
-				SyntaxFactory.InvocationExpression(
-					SyntaxFactory.MemberAccessExpression(
-						SyntaxKind.SimpleMemberAccessExpression,
-						returnType,
-						SyntaxFactory.IdentifierName("Return")),
-					SyntaxFactory.ArgumentList(
-						SyntaxFactory.SingletonSeparatedList(
-							SyntaxFactory.Argument(
-								SyntaxFactory.IdentifierName("default")))))
-				.WithLeadingTrivia(SyntaxFactory.Whitespace(" ")));
-		var boundBlock = MonadicBangRewriter.BindInBlock(block.AddStatements(unitReturn), returnType);
+		var defaultReturn = BuildDefaultReturn();
+		var boundBlock = MonadicBangRewriter.BindInBlock(block.AddStatements(defaultReturn), returnType);
 		var thenBlock = SyntaxFactory.Block(rest)!;
 		return new LinkedList<StatementSyntax>(new[] { BindBlockToReturn(boundBlock, thenBlock) });
 
@@ -102,12 +91,88 @@ public class StatementBinder
 				statements.First?.Value is BlockSyntax;
 	}
 
+	private LinkedList<StatementSyntax>? BindIfStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements)
+	{
+		if (!IsIfStatement(statement, statements))
+		{
+			return null;
+		}
+		var monadicKeyword = statement;
+		var ifStatement = (IfStatementSyntax)statements.First!.Value;
+		statements.RemoveFirst();
+
+		var rest = BindInStatements(statements);
+		var thenBlock = SyntaxFactory.Block(rest)!;
+
+		var (conditionBinder, boundCondition) = BindExpression(ifStatement.Condition);
+		ifStatement = ifStatement.WithCondition(boundCondition);
+
+		if (ifStatement.Statement is not BlockSyntax)
+		{
+			ifStatement = ifStatement.WithStatement(SyntaxFactory.Block(ifStatement.Statement));
+		}
+		var statementBlock = (BlockSyntax)ifStatement.Statement;
+		statementBlock = statementBlock.AddStatements(BuildDefaultReturn());
+		var boundStatementBlock = MonadicBangRewriter.BindInBlock(statementBlock, returnType);
+		ifStatement = ifStatement.WithStatement(BindBlockToReturn(boundStatementBlock, thenBlock));
+
+		if (ifStatement.Else is null)
+		{
+			var elseStatement = BuildDefaultReturn();
+			ifStatement = ifStatement.WithElse(SyntaxFactory.ElseClause(ExpressionBinder.BuildMonadicBind(elseStatement.Expression!, thenBlock)));
+		}
+		else if (ifStatement.Else is ElseClauseSyntax { Statement: IfStatementSyntax elseIfStatement } elseClause)
+		{
+			var boundElseBlock = MonadicBangRewriter.BindInBlock(SyntaxFactory.Block(monadicKeyword, elseIfStatement), returnType);
+			ifStatement = ifStatement.WithElse(elseClause.WithStatement(BindBlockToReturn(boundElseBlock, thenBlock)));
+		}
+		else
+		{
+			if (ifStatement.Else is ElseClauseSyntax { Statement: not BlockSyntax })
+			{
+				ifStatement = ifStatement.WithElse(ifStatement.Else.WithStatement(SyntaxFactory.Block(ifStatement.Else.Statement)));
+			}
+			var elseBlock = (BlockSyntax)ifStatement.Else!.Statement;
+			elseBlock = elseBlock.AddStatements(BuildDefaultReturn());
+			var boundElseBlock = MonadicBangRewriter.BindInBlock(elseBlock, returnType);
+			ifStatement = ifStatement.WithElse(ifStatement.Else.WithStatement(BindBlockToReturn(boundElseBlock, thenBlock)));
+		}
+
+		if (!conditionBinder.NeedsBinding())
+		{
+			return new LinkedList<StatementSyntax>(new[] { ifStatement });
+		}
+
+		var ifBlock = SyntaxFactory.Block(ifStatement)!;
+		var blockStatement = conditionBinder.Bind(ifBlock);
+		return new LinkedList<StatementSyntax>(new[] { blockStatement });
+
+		static bool IsIfStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
+			statement is ExpressionStatementSyntax expressionStatement &&
+				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
+				expressionStatement.SemicolonToken.IsMissing &&
+				statements.First?.Value is IfStatementSyntax;
+	}
+
 	private LinkedList<StatementSyntax> NoBind(StatementSyntax statement, LinkedList<StatementSyntax> statements)
 	{
 		var rest = BindInStatements(statements);
 		rest.AddFirst(statement);
 		return rest;
 	}
+
+	private ReturnStatementSyntax BuildDefaultReturn() =>
+		SyntaxFactory.ReturnStatement(
+			SyntaxFactory.InvocationExpression(
+				SyntaxFactory.MemberAccessExpression(
+					SyntaxKind.SimpleMemberAccessExpression,
+					returnType,
+					SyntaxFactory.IdentifierName("Return")),
+				SyntaxFactory.ArgumentList(
+					SyntaxFactory.SingletonSeparatedList(
+						SyntaxFactory.Argument(
+							SyntaxFactory.IdentifierName("default")))))
+			.WithLeadingTrivia(SyntaxFactory.Whitespace(" ")));
 
 	private (ExpressionBinder, StatementSyntax) BindExpressionsInStatement(StatementSyntax expression)
 	{
@@ -116,8 +181,20 @@ public class StatementBinder
 		return (binder, boundExpr!);
 	}
 
+	private (ExpressionBinder, ExpressionSyntax) BindExpression(ExpressionSyntax expression)
+	{
+		var binder = new ExpressionBinder();
+		var boundExpr = binder.Visit(expression) as ExpressionSyntax;
+		return (binder, boundExpr!);
+	}
+
 	private BlockSyntax BindBlockToReturn(BlockSyntax block, BlockSyntax thenBlock)
 	{
+		if (thenBlock.Statements.Count == 0)
+		{
+			return block;
+		}
+
 		var returnBinder = new ReturnBinder(thenBlock);
 		return (BlockSyntax)returnBinder.Visit(block);
 	}
