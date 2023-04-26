@@ -1,5 +1,5 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -34,6 +34,7 @@ public class StatementBinder
 
 	private LinkedList<StatementSyntax> BindStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
 		BindIfStatement(statement, statements) ??
+			BindMonadicForEachStatement(statement, statements) ??
 			BindBlockStatement(statement, statements) ??
 			BindSimpleStatement(statement, statements) ??
 			NoBind(statement, statements);
@@ -145,6 +146,66 @@ public class StatementBinder
 			statement is IfStatementSyntax;
 	}
 
+	public LinkedList<StatementSyntax>? BindMonadicForEachStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements)
+	{
+		if (!IsForEachStatement(statement, statements))
+		{
+			return null;
+		}
+		var forEachStatement = (ForEachStatementSyntax)statements.First!.Value;
+		statements.RemoveFirst();
+
+		var rest = BindInStatements(statements);
+		var thenBlock = SyntaxFactory.Block(rest)!;
+
+		var (collectionBinder, boundCollection) = BindExpression(forEachStatement.Expression);
+
+		if (forEachStatement.Statement is not BlockSyntax)
+		{
+			forEachStatement = forEachStatement.WithStatement(SyntaxFactory.Block(forEachStatement.Statement));
+		}
+		var statementBlock = (BlockSyntax)forEachStatement.Statement;
+		statementBlock = statementBlock.AddStatements(BuildDefaultReturn());
+		var boundStatementBlock = MonadicBangRewriter.BindInBlock(statementBlock, returnType);
+
+		var boundForEachStatement = SyntaxFactory.ReturnStatement(
+				SyntaxFactory.InvocationExpression(
+					SyntaxFactory.GenericName(
+						SyntaxFactory.Identifier("global::Monads.SourceGenerator.Loops.BindForEachStatement"),
+						SyntaxFactory.TypeArgumentList(
+							SyntaxFactory.SeparatedList(new[]
+							{
+								forEachStatement.Type,
+								GetMonadReturnType(),
+								returnType
+							}))
+					),
+					SyntaxFactory.ArgumentList(
+						SyntaxFactory.SeparatedList(new[]
+						{
+							SyntaxFactory.Argument(boundCollection),
+							SyntaxFactory.Argument(
+								SyntaxFactory.SimpleLambdaExpression(
+									SyntaxFactory.Parameter(forEachStatement.Identifier),
+									boundStatementBlock))
+						})))
+			.WithLeadingTrivia(forEachStatement.GetLeadingTrivia()
+				.Add(SyntaxFactory.Whitespace(" "))));
+
+		if (collectionBinder.NeedsBinding())
+		{
+			boundForEachStatement = (ReturnStatementSyntax)collectionBinder.Bind(SyntaxFactory.Block(boundForEachStatement));
+		}
+
+		return new LinkedList<StatementSyntax>(new[] { ExpressionBinder.BuildMonadicBind(boundForEachStatement.Expression!, thenBlock) });
+
+		static bool IsForEachStatement(StatementSyntax statement, LinkedList<StatementSyntax> statements) =>
+			statement is ExpressionStatementSyntax expressionStatement &&
+				expressionStatement.Expression is IdentifierNameSyntax { Identifier: SyntaxToken { Text: "monadic" } } &&
+				expressionStatement.SemicolonToken.IsMissing &&
+				statements.First?.Value is ForEachStatementSyntax;
+	}
+
 	private LinkedList<StatementSyntax> NoBind(StatementSyntax statement, LinkedList<StatementSyntax> statements)
 	{
 		var rest = BindInStatements(statements);
@@ -192,4 +253,12 @@ public class StatementBinder
 
 	private bool ShouldBeReInserted(StatementSyntax statement) =>
 		statement is not ExpressionStatementSyntax { Expression: IdentifierNameSyntax };
+
+	private TypeSyntax GetMonadReturnType() =>
+		returnType switch
+		{
+			GenericNameSyntax { TypeArgumentList: TypeArgumentListSyntax { Arguments: { Count: > 0 } genericArguments } } =>
+				genericArguments.Last(),
+			_ => throw new Exception("Invalid monad return type"),
+		};
 }

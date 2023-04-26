@@ -28,3 +28,7 @@ var res321 = sm32.Function(1);
 Console.WriteLine($"State321: {res321}");
 var res322 = sm32.Function(2);
 Console.WriteLine($"State322: {res322}");
+
+var loop = ProgramM.LoopStateFunction(new int[] { 0, 1, 20, 300 });
+var loopRes = loop.Function(0);
+Console.WriteLine($"LoopState: {loopRes}");
