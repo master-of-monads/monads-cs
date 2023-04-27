@@ -109,4 +109,12 @@ public static class ProgramM
 		var j = State.Get<int, string>()!;
 		return State.Return<int, string, string>(j.ToString());
 	}
+
+	[Monadic]
+	public static IEnumerable<(X, Y)> ListComprehension<X, Y>(IEnumerable<X> xs, IEnumerable<Y> ys)
+	{
+		var x = xs!;
+		var y = ys!;
+		return MonadicEnumerable.Return((x, y));
+	}
 }

@@ -40,3 +40,6 @@ Console.WriteLine($"LoopState2: {loopRes2}");
 var loop3 = ProgramM.LoopStateFunction3(5);
 var loopRes3 = loop3.Function(0);
 Console.WriteLine($"LoopState3: {loopRes3}");
+
+var list = ProgramM.ListComprehension(new[] { 1, 2, 3 }, new[] { 'a', 'b', 'c' });
+Console.WriteLine($"List: {String.Join(", ", list)}");
