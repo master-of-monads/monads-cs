@@ -1,0 +1,234 @@
+﻿using System;
+using System.Collections.Generic;
+using Monads;
+
+/// <summary>
+/// Use the exclamation point `!` as the bind operator, it can't be used as the
+/// null-forgiving operator.
+/// </summary>
+public class Program
+{
+	public static void Main()
+	{
+		var result = MaybeFunction();
+		Console.WriteLine($"Maybe: {result}");
+		var result2 = MaybeFunction2();
+		Console.WriteLine($"Maybe2: {result2}");
+
+		var sm = StateFunction();
+		var res = sm.Function(2);
+		Console.WriteLine($"State: {res}");
+
+		var sm2 = StateFunction2();
+		var res2 = sm2.Function(2);
+		Console.WriteLine($"State2: {res2}");
+
+		var sm3 = StateFunction3();
+		var res30 = sm3.Function(0);
+		Console.WriteLine($"State30: {res30}");
+		var res31 = sm3.Function(1);
+		Console.WriteLine($"State31: {res31}");
+		var res32 = sm3.Function(2);
+		Console.WriteLine($"State32: {res32}");
+
+		var sm32 = StateFunction32();
+		var res320 = sm32.Function(0);
+		Console.WriteLine($"State320: {res320}");
+		var res321 = sm32.Function(1);
+		Console.WriteLine($"State321: {res321}");
+		var res322 = sm32.Function(2);
+		Console.WriteLine($"State322: {res322}");
+
+		var loop = LoopStateFunction(new int[] { 0, 1, 20, 300 });
+		var loopRes = loop.Function(0);
+		Console.WriteLine($"LoopState: {loopRes}");
+
+		var loop2 = LoopStateFunction2(5);
+		var loopRes2 = loop2.Function(0);
+		Console.WriteLine($"LoopState2: {loopRes2}");
+
+		var loop3 = LoopStateFunction3(5);
+		var loopRes3 = loop3.Function(0);
+		Console.WriteLine($"LoopState3: {loopRes3}");
+
+		var list = ListComprehension(new[] { 1, 2, 3 }, new[] { 'a', 'b', 'c' });
+		Console.WriteLine($"List: {String.Join(", ", list)}");
+	}
+
+	/// <summary>
+	/// Using the bind operator `!` on a "None" value will immediately return
+	/// "None" from the containing function.
+	/// If used one a "Some" value, the value will be unwrapped and given as
+	/// result.
+	/// </summary>
+	[Monadic]
+	public static Maybe<string, string> MaybeFunction()
+	{
+		var result = Maybe.None<string, string>()!;
+		Console.WriteLine("Won't print");
+		return Maybe.Some<string, string>(result.ToUpper());
+	}
+
+	/// <summary>
+	/// The bind operator `!` also works in expressions.
+	/// </summary>
+	[Monadic]
+	public static Maybe<string, string> MaybeFunction2() =>
+		Maybe.Some<string, string>(Maybe.None<string, string>()!.ToUpper());
+
+	/// <summary>
+	/// The State monad is useful in Haskell, but classes and methods make it
+	/// superfluous in C#. Non the less, it is a good example of how the bind
+	/// operator `!` can be used.
+	/// Using the `State.Get` and `State.Set` we can manipulate the state as if
+	/// it's a global variable even though it's not, try calling other
+	/// functions from this function and see how the state is shared between
+	/// them.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> StateFunction()
+	{
+		var i = State.Get<int, string>()!;
+		State.Set<int, string>(i + 2)!;
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// The bind operator `!` works in blocks.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> StateFunction2()
+	{
+		{
+			var i = State.Get<int, string>()!;
+			State.Set<int, string>(i + 2)!;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// The bind operator `!` works in if-else-statements.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> StateFunction3()
+	{
+		if (State.Get<int, string>()! == 0)
+		{
+			State.Set<int, string>(100)!;
+		}
+		else if (State.Get<int, string>()! == 1)
+		{
+			State.Set<int, string>(200)!;
+		}
+		else
+		{
+			State.Set<int, string>(300)!;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// The bind operator `!` does not cause problems with local variables.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> StateFunction32()
+	{
+		var i = State.Get<int, string>()!;
+		if (i == 0)
+		{
+			i = 100;
+		}
+		else if (i == 1)
+		{
+			i = 200;
+		}
+		else
+		{
+			i = 300;
+		}
+		State.Set<int, string>(i)!;
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// The bind operator `!` works in foreach-loops with a slight modification.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> LoopStateFunction(IEnumerable<int> values)
+	{
+		monadic foreach (int i in values)
+		{
+			State.Set<int, string>(State.Get<int, string>()! + i)!;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// The bind operator `!` works in while-loops with a slight modification.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> LoopStateFunction2(int max)
+	{
+		var i = 0;
+		monadic while (i < max)
+		{
+			State.Set<int, string>(State.Get<int, string>()! + i)!;
+			i++;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// The bind operator `!` works in for-loops with a slight modification.
+	/// </summary>
+	[Monadic]
+	public static State<int, string, string> LoopStateFunction3(int max)
+	{
+		monadic for (var i = 0; i < max; i++)
+		{
+			State.Set<int, string>(State.Get<int, string>()! + i)!;
+		}
+		var j = State.Get<int, string>()!;
+		return State.Return<int, string, string>(j.ToString());
+	}
+
+	/// <summary>
+	/// Through an extension method the `IEnumerable<T>` interface has been made
+	/// into a monad that allows for list comprehensions.
+	/// The bind operator `!` "extracts" every single value from the enumerable
+	/// one at a time. Because of this the code following a bind is executed as
+	/// many times as there are values in the enumerable. The resulting
+	/// enumerable is the concatenation of all values returned from the code.
+	/// </summary>
+	[Monadic]
+	public static IEnumerable<(X, Y)> ListComprehension<X, Y>(IEnumerable<X> xs, IEnumerable<Y> ys)
+	{
+		X x = xs!;
+		Y y = ys!;
+		return MonadicEnumerable.Return((x, y));
+	}
+}
+
+// If you want to implement a new monad you can either implement the following
+// interface:
+//
+// public interface IMonad<A, B, This, Next>
+// 	where This : IMonad<A, B, This, Next>
+// 	where Next : IMonad<B, B, Next, Next>
+// {
+// 	static abstract This Return(A a);
+//
+// 	Next Bind(Func<A, Next> f);
+// }
+//
+// Or you can simply define a `Bind` method as an extension method on the type
+// you wish to make a monad out of.
+//
+// The only actual requirement is that there exists a `Bind` method following
+// the signature `Next Bind(Func<A, Next> f)`.

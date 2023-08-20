@@ -1,0 +1,115 @@
+﻿@using Microsoft.CodeAnalysis.CSharp
+@using Monads.SourceGenerator
+@using Microsoft.CodeAnalysis
+@using Microsoft.CodeAnalysis.Text
+@using System.Reflection
+@using System.Threading
+@using BlazorMonaco.Editor
+@using System.IO
+
+<h1>Monads C#</h1>
+
+<div id="container">
+	<StandaloneCodeEditor Id="editor" ConstructionOptions="EditorOptions" />
+	<div id="output">
+		<button @onclick="OnRun">Run</button>
+		<pre>@Output</pre>
+	</div>
+</div>
+
+@code
+{
+	private StandaloneCodeEditor Editor = null!;
+	private string Output = string.Empty;
+
+    private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor editor)
+	{
+		Editor = editor;
+
+		return new()
+		{
+		    Language = "csharp",
+			Value = File.ReadAllText(Path.Join(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "Program.mcs")),
+		};
+	}
+
+	private async Task OnRun()
+	{
+		var code = await Editor.GetValue();
+		var generator = CSharpGeneratorDriver.Create(
+			new[] { new MonadicSourceGenerator() },
+			new[] { new MonadicSource("Program", code) });
+		var preCompilation = CSharpCompilation.Create(
+			assemblyName: "Monadic.Demo",
+			references: new[]
+				{
+					"System.dll",
+					"System.Collections.dll",
+					"System.Console.dll",
+					"System.Core.dll",
+					"System.Private.CoreLib.dll",
+					"System.Runtime.dll",
+				}
+				.Select(n => Path.Join(Path.GetDirectoryName(typeof(object).Assembly.Location), n))
+				.Append(typeof(MonadicAttribute).Assembly.Location)
+				.Select(l => MetadataReference.CreateFromFile(l)),
+			options: new CSharpCompilationOptions(outputKind: OutputKind.ConsoleApplication));
+		generator.RunGeneratorsAndUpdateCompilation(
+			preCompilation,
+			out var compilation,
+			out var generatorDiagnostics);
+
+		if (!generatorDiagnostics.IsDefaultOrEmpty)
+		{
+			Output = "Generator diagnostics:\n\n" + string.Join("\n\n", generatorDiagnostics);
+			return;
+		}
+
+		await using var ms = new MemoryStream();
+		var result = compilation.Emit(ms);
+
+		if (!result.Success)
+		{
+			Output = "Compiler diagnostics:\n\n" + string.Join("\n\n", result.Diagnostics);
+			return;
+		}
+
+		var assembly = Assembly.Load(ms.ToArray());
+		var entryPoint = compilation.GetEntryPoint(default);
+		var type = assembly.GetType($"{entryPoint.ContainingNamespace.MetadataName}.{entryPoint.ContainingType.MetadataName}"); ;
+		var entryPointMethod = type.GetMethod(entryPoint.MetadataName);
+
+		var ogOut = Console.Out;
+		try
+		{
+			await using StringWriter sw = new StringWriter();
+			Console.SetOut(sw);
+
+			var main = (Action)entryPointMethod.CreateDelegate(typeof(Action));
+			main.Invoke();
+
+			Output = sw.ToString();
+		}
+		catch (Exception ex)
+		{
+			Output = $"{ex.GetType()}: {ex.Message}";
+		}
+		finally
+		{
+			Console.SetOut(ogOut);
+		}
+	}
+
+	private class MonadicSource : AdditionalText
+	{
+		public override string Path => $"{Name}.mcs";
+		public string Name { get; }
+		public string Text { get; }
+
+		public MonadicSource(string name, string text) =>
+			(Name, Text) = (name, text);
+
+		public override SourceText? GetText(CancellationToken cancellationToken = default) =>
+			SourceText.From(Text);
+	}
+}
